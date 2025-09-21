@@ -38,6 +38,7 @@ export default function AuthScreen() {
     password: '',
     confirmPassword: '',
     userType: 'citizen',
+    userType: 'user',
     stateId: '',
     districtId: '',
     areaId: '',
@@ -46,10 +47,11 @@ export default function AuthScreen() {
   const router = useRouter();
 
   const userTypes = [
-    { id: 'citizen', label: 'Citizen', icon: '👤', color: '#1E40AF', description: 'Report issues and engage with community' },
+    { id: 'user', label: 'Citizen', icon: '👤', color: '#1E40AF', description: 'Report issues and engage with community' },
+    { id: 'admin', label: 'System Admin', icon: '⚙️', color: '#EF4444', description: 'Full system administration access' },
     { id: 'area_super_admin', label: 'Area Super Admin', icon: '👨‍💼', color: '#10B981', description: 'Manage area-wide operations and assign to departments' },
     { id: 'department_admin', label: 'Department Admin', icon: '🏛️', color: '#8B5CF6', description: 'Manage department issues and create tenders' },
-    { id: 'contractor', label: 'Contractor', icon: '🏗️', color: '#F59E0B', description: 'Bid on municipal projects and tenders' },
+    { id: 'tender', label: 'Contractor', icon: '🏗️', color: '#F59E0B', description: 'Bid on municipal projects and tenders' },
   ];
 
   // Load states when admin type is selected and we reach step 2
@@ -203,7 +205,34 @@ export default function AuthScreen() {
 
         if (result.error) {
           console.error('Sign in error:', result.error);
-          showErrorToast('Authentication Error', result.error.message || 'Failed to sign in');
+          
+          // Handle specific error cases
+          if (result.error.code === 'email_not_confirmed') {
+            Alert.alert(
+              'Email Verification Required',
+              result.error.message,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Resend Verification',
+                  onPress: async () => {
+                    try {
+                      const { error } = await sendVerificationEmail(formData.email);
+                      if (error) {
+                        showErrorToast('Error', 'Failed to send verification email');
+                      } else {
+                        showSuccessToast('Verification Sent', 'Please check your email for the verification link');
+                      }
+                    } catch (err) {
+                      showErrorToast('Error', 'Failed to send verification email');
+                    }
+                  }
+                }
+              ]
+            );
+          } else {
+            showErrorToast('Authentication Error', result.error.message || 'Failed to sign in');
+          }
           return;
         }
 
@@ -228,6 +257,11 @@ export default function AuthScreen() {
 
         // Navigate based on user type
         switch (userType) {
+          case 'admin':
+            console.log('Navigating to /admin');
+            router.replace('/admin');
+            break;
+
           case 'area_super_admin':
             console.log('Navigating to /area-super-admin');
             router.replace('/area-super-admin');
@@ -238,7 +272,7 @@ export default function AuthScreen() {
             router.replace('/department-admin');
             break;
 
-          case 'contractor':
+          case 'tender':
             console.log('Navigating to /tender-dashboard');
             router.replace('/tender-dashboard');
             break;
@@ -423,6 +457,7 @@ export default function AuthScreen() {
       password: '',
       confirmPassword: '',
       userType: 'citizen',
+      userType: 'user',
       stateId: '',
       districtId: '',
       areaId: '',
