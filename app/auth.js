@@ -37,7 +37,7 @@ export default function AuthScreen() {
     postalCode: '',
     password: '',
     confirmPassword: '',
-    userType: 'citizen', // Changed from 'user' to 'citizen' to match backend
+    userType: 'citizen',
     stateId: '',
     districtId: '',
     areaId: '',
@@ -45,7 +45,6 @@ export default function AuthScreen() {
   });
   const router = useRouter();
 
-  // Updated user types to match backend expectations
   const userTypes = [
     { id: 'citizen', label: 'Citizen', icon: '👤', color: '#1E40AF', description: 'Report issues and engage with community' },
     { id: 'area_super_admin', label: 'Area Super Admin', icon: '👨‍💼', color: '#10B981', description: 'Manage area-wide operations and assign to departments' },
@@ -63,12 +62,15 @@ export default function AuthScreen() {
   const loadStates = async () => {
     try {
       setLocationData(prev => ({ ...prev, loadingStates: true }));
-      const { data, error } = await getStates();
-      if (error) {
+      const result = await getStates();
+      
+      if (result.error) {
+        console.error('Error loading states:', result.error);
         showErrorToast('Error', 'Failed to load states');
         return;
       }
-      setLocationData(prev => ({ ...prev, states: data || [] }));
+      
+      setLocationData(prev => ({ ...prev, states: result.data || [] }));
     } catch (error) {
       console.error('Error loading states:', error);
       showErrorToast('Error', 'Failed to load states');
@@ -82,10 +84,15 @@ export default function AuthScreen() {
       setFormData(prev => ({ ...prev, stateId: state.id, districtId: '', areaId: '' }));
       setLocationData(prev => ({ ...prev, loadingDistricts: true, districts: [], areas: [] }));
       
-      const { data, error } = await getDistrictsByState(state.id);
-      if (error) throw error;
+      const result = await getDistrictsByState(state.id);
       
-      setLocationData(prev => ({ ...prev, districts: data || [] }));
+      if (result.error) {
+        console.error('Error loading districts:', result.error);
+        showErrorToast('Error', 'Failed to load districts');
+        return;
+      }
+      
+      setLocationData(prev => ({ ...prev, districts: result.data || [] }));
     } catch (error) {
       console.error('Error loading districts:', error);
       showErrorToast('Error', 'Failed to load districts');
@@ -99,10 +106,15 @@ export default function AuthScreen() {
       setFormData(prev => ({ ...prev, districtId: district.id, areaId: '' }));
       setLocationData(prev => ({ ...prev, loadingAreas: true, areas: [] }));
       
-      const { data, error } = await getAreasByDistrict(district.id);
-      if (error) throw error;
+      const result = await getAreasByDistrict(district.id);
       
-      setLocationData(prev => ({ ...prev, areas: data || [] }));
+      if (result.error) {
+        console.error('Error loading areas:', result.error);
+        showErrorToast('Error', 'Failed to load areas');
+        return;
+      }
+      
+      setLocationData(prev => ({ ...prev, areas: result.data || [] }));
     } catch (error) {
       console.error('Error loading areas:', error);
       showErrorToast('Error', 'Failed to load areas');
@@ -118,9 +130,15 @@ export default function AuthScreen() {
   const loadDepartments = async () => {
     try {
       setLocationData(prev => ({ ...prev, loadingDepartments: true }));
-      const { data, error } = await getDepartments();
-      if (error) throw error;
-      setLocationData(prev => ({ ...prev, departments: data || [] }));
+      const result = await getDepartments();
+      
+      if (result.error) {
+        console.error('Error loading departments:', result.error);
+        showErrorToast('Error', 'Failed to load departments');
+        return;
+      }
+      
+      setLocationData(prev => ({ ...prev, departments: result.data || [] }));
     } catch (error) {
       console.error('Error loading departments:', error);
       showErrorToast('Error', 'Failed to load departments');
@@ -150,15 +168,15 @@ export default function AuthScreen() {
         !formData.email?.trim() ||
         !formData.phone?.trim()
       ) {
-        Alert.alert('Error', 'Please fill in all required fields (marked with *)');
+        showErrorToast('Validation Error', 'Please fill in all required fields (marked with *)');
         return;
       }
       if (!isValidEmail(formData.email)) {
-        Alert.alert('Error', 'Please enter a valid email address');
+        showErrorToast('Validation Error', 'Please enter a valid email address');
         return;
       }
       if (!isValidPhone(formData.phone)) {
-        Alert.alert('Error', 'Please enter a valid phone number');
+        showErrorToast('Validation Error', 'Please enter a valid phone number');
         return;
       }
 
@@ -177,7 +195,6 @@ export default function AuthScreen() {
       if (isLogin) {
         if (!formData.email?.trim() || !formData.password) {
           Alert.alert('Error', 'Please fill in email and password');
-          setLoading(false);
           return;
         }
 
@@ -187,7 +204,6 @@ export default function AuthScreen() {
         if (result.error) {
           console.error('Sign in error:', result.error);
           showErrorToast('Authentication Error', result.error.message || 'Failed to sign in');
-          setLoading(false);
           return;
         }
 
@@ -195,99 +211,77 @@ export default function AuthScreen() {
         if (!user) {
           console.error('No user data returned:', result);
           showErrorToast('Error', 'No user returned from authentication');
-          setLoading(false);
           return;
         }
 
         console.log('User signed in successfully:', user.id);
 
-        // Try to fetch profile
+        // Get user type from profile or auth metadata
         let userType = 'citizen';
-        try {
-          console.log('Fetching profile for user ID:', user.id);
-          const profileResult = await getUserProfile(user.id);
-          console.log('Profile query result:', profileResult);
-
-          if (profileResult?.data) {
-            userType = profileResult.data.user_type || 'citizen';
-          } else {
-            // fallback to auth metadata
-            userType = user.user_metadata?.user_type || 'citizen';
-          }
-        } catch (profileError) {
-          console.error('Failed to get profile:', profileError);
-          userType = user.user_metadata?.user_type || 'citizen';
+        if (result.data.profile?.user_type) {
+          userType = result.data.profile.user_type;
+        } else if (user.user_metadata?.user_type) {
+          userType = user.user_metadata.user_type;
         }
 
         console.log('User type determined:', userType);
 
-        // Route navigation
-        try {
-          switch (userType) {
-            case 'area_super_admin':
-              console.log('Navigating to /area-super-admin');
-              return router.replace('/area-super-admin');
+        // Navigate based on user type
+        switch (userType) {
+          case 'area_super_admin':
+            console.log('Navigating to /area-super-admin');
+            router.replace('/area-super-admin');
+            break;
 
-            case 'department_admin':
-              console.log('Navigating to /department-admin');
-              return router.replace('/department-admin');
+          case 'department_admin':
+            console.log('Navigating to /department-admin');
+            router.replace('/department-admin');
+            break;
 
-            case 'contractor':
-              console.log('Navigating to /tender-dashboard');
-              return router.replace('/tender-dashboard');
+          case 'contractor':
+            console.log('Navigating to /tender-dashboard');
+            router.replace('/tender-dashboard');
+            break;
 
-            default:
-              console.log('Navigating to /(tabs)');
-              return router.replace('/(tabs)');
-          }
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          router.replace('/(tabs)');
-        } finally {
-          setLoading(false);
+          default:
+            console.log('Navigating to /(tabs)');
+            router.replace('/(tabs)');
+            break;
         }
       }
-
       // SIGNUP FLOW
-      if (currentStep === 2) {
+      else if (currentStep === 2) {
         // Validation checks
         if (!formData.password || !formData.confirmPassword) {
           Alert.alert('Error', 'Please fill in password fields');
-          setLoading(false);
           return;
         }
 
         if (formData.password !== formData.confirmPassword) {
           showErrorToast('Validation Error', 'Passwords do not match');
-          setLoading(false);
           return;
         }
 
-        // Updated to match backend validation (8 characters minimum)
         if (formData.password.length < 8) {
           showErrorToast('Validation Error', 'Password must be at least 8 characters long');
-          setLoading(false);
           return;
         }
 
         // Validate admin selections
         if (formData.userType === 'area_super_admin' && !formData.areaId) {
           Alert.alert('Error', 'Please select an area to manage');
-          setLoading(false);
           return;
         }
 
         if (formData.userType === 'department_admin' && !formData.departmentId) {
           Alert.alert('Error', 'Please select a department to manage');
-          setLoading(false);
           return;
         }
 
-        // Prepare profile data - match backend expectations exactly
+        // Prepare profile data
         const profileData = {
           fullName: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
           phone: formData.phone.trim(),
-          // Only include address fields if they exist and have content
           ...(formData.address?.trim() && { address: formData.address.trim() }),
           ...(formData.city?.trim() && { city: formData.city.trim() }),
           ...(formData.state?.trim() && { state: formData.state.trim() }),
@@ -310,7 +304,6 @@ export default function AuthScreen() {
         if (result.error) {
           let errorMessage = result.error.message || 'Failed to create account';
 
-          // Enhanced error handling with more specific messages
           if (result.error.message?.includes('User already registered')) {
             errorMessage = 'This email is already registered. Please try signing in instead.';
           } else if (result.error.message?.includes('Email not confirmed')) {
@@ -326,15 +319,12 @@ export default function AuthScreen() {
           }
 
           showErrorToast('Registration Error', errorMessage);
-          setLoading(false);
           return;
         }
 
         // Handle successful signup
         if (result.data) {
           setVerificationSent(true);
-
-          // Show success message with better instructions
           showSuccessToast(
             'Account Created Successfully!',
             `Welcome to जनConnect! Please check your email (${formData.email}) to verify your account before signing in.`
@@ -347,10 +337,8 @@ export default function AuthScreen() {
             setVerificationSent(false);
             resetForm();
           }, 4000);
-
         } else {
           showErrorToast('Error', 'Account may have been created, but there was an issue. Please try signing in.');
-
           setTimeout(() => {
             setIsLogin(true);
             setCurrentStep(1);
@@ -390,10 +378,10 @@ export default function AuthScreen() {
 
     try {
       setResetLoading(true);
-      const { error } = await resetPassword(resetEmail.trim());
+      const result = await resetPassword(resetEmail.trim());
 
-      if (error) {
-        showErrorToast('Reset Error', error.message || 'Failed to send reset email');
+      if (result.error) {
+        showErrorToast('Reset Error', result.error.message || 'Failed to send reset email');
         return;
       }
 
@@ -434,7 +422,7 @@ export default function AuthScreen() {
       postalCode: '',
       password: '',
       confirmPassword: '',
-      userType: 'citizen', // Changed default to 'citizen'
+      userType: 'citizen',
       stateId: '',
       districtId: '',
       areaId: '',
@@ -538,20 +526,6 @@ export default function AuthScreen() {
         </View>
       </View>
     );
-  };
-
-  const getCategoryColor = (category) => {
-    const colors = {
-      roads: '#EF4444',
-      utilities: '#F59E0B',
-      environment: '#10B981',
-      safety: '#8B5CF6',
-      parks: '#06B6D4',
-      planning: '#8B5CF6',
-      finance: '#F59E0B',
-      administration: '#6B7280',
-    };
-    return colors[category] || '#6B7280';
   };
 
   return (
@@ -778,7 +752,6 @@ export default function AuthScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  {/* Updated password hint */}
                   <Text style={styles.passwordHint}>
                     Password must be at least 8 characters long
                   </Text>
@@ -961,8 +934,7 @@ export default function AuthScreen() {
       </ScrollView>
     </KeyboardAvoidingView>
   );
-};
-
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -1153,54 +1125,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    padding: 16,
-  },
-  optionsContainer: {
-    gap: 8,
-  },
-  optionButton: {
-    padding: 12,
-    borderWidth: 2,
-    borderRadius: 12,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
-  },
-  optionButtonActive: {
-    backgroundColor: '#F0F9FF',
-    borderColor: '#1E40AF',
-  },
-  optionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  optionTextActive: {
-    color: '#1E40AF',
-  },
-  optionSubtext: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  optionDescription: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 2,
-    lineHeight: 14,
-  },
   optionName: {
     fontSize: 16,
     fontWeight: '600',
@@ -1216,6 +1140,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8B5CF6',
     fontWeight: '500',
+  },
+  optionDescription: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+    lineHeight: 14,
   },
   buttonContainer: {
     flexDirection: 'row',
